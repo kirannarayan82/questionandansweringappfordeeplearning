@@ -2,3 +2,4 @@ streamlit
 pymupdf 
 sentence-transformers 
 transformers
+fitz
