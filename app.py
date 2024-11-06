@@ -2,7 +2,7 @@ import streamlit as st
 import fitz  # PyMuPDF
 from sentence_transformers import SentenceTransformer, util
 from transformers import T5Tokenizer, T5ForConditionalGeneration
-
+pdf_path='https://github.com/lachlansimpson/DeepLearningBook/blob/master/DeepLearningBook.pdf'
 def extract_text_from_pdf(pdf_path):
     pdf_document = fitz.open(pdf_path)
     text = ""
@@ -27,42 +27,35 @@ def generate_answer(query, passages, tokenizer, model):
 
 # App title
 st.title('Deep Learning Book Q&A')
-st.write("Ask questions about the 'Deep Learning' book by Ian Goodfellow")
+st.text("Enter deep learning related question")
 
 # File uploader
-uploaded_file = st.file_uploader("Upload the 'Deep Learning' book PDF", type="pdf")
+book_text = extract_text_from_pdf(pdf_path)
 
-if uploaded_file is not None:
-    with st.spinner("Extracting text from PDF..."):
-        book_text = extract_text_from_pdf(uploaded_file)
-        st.success("Text extracted successfully!")
+passages = book_text.split('\n\n')
 
-    passages = book_text.split('\n\n')
+# Load Sentence-BERT model
+with st.spinner("Loading retrieval model..."):
+    retrieval_model = SentenceTransformer('all-MiniLM-L6-v2')
+    passage_embeddings = retrieval_model.encode(passages, convert_to_tensor=True)
 
-    # Load Sentence-BERT model
-    with st.spinner("Loading retrieval model..."):
-        retrieval_model = SentenceTransformer('all-MiniLM-L6-v2')
-        passage_embeddings = retrieval_model.encode(passages, convert_to_tensor=True)
+# Load T5 model
+with st.spinner("Loading generation model..."):
+    tokenizer = T5Tokenizer.from_pretrained('t5-base')
+    generation_model = T5ForConditionalGeneration.from_pretrained('t5-base')
+
+query = st.text_input("Enter your question:")
+
+if st.button("Get Answer"):
+    with st.spinner("Retrieving passages..."):
+        retrieved_passages = retrieve_passages(query, retrieval_model, passage_embeddings, passages)
     
-    # Load T5 model
-    with st.spinner("Loading generation model..."):
-        tokenizer = T5Tokenizer.from_pretrained('t5-base')
-        generation_model = T5ForConditionalGeneration.from_pretrained('t5-base')
+    with st.spinner("Generating answer..."):
+        answer = generate_answer(query, retrieved_passages, tokenizer, generation_model)
     
-    query = st.text_input("Enter your question:")
-    
-    if st.button("Get Answer"):
-        with st.spinner("Retrieving passages..."):
-            retrieved_passages = retrieve_passages(query, retrieval_model, passage_embeddings, passages)
-        
-        with st.spinner("Generating answer..."):
-            answer = generate_answer(query, retrieved_passages, tokenizer, generation_model)
-        
-        st.write(f"**Answer**: {answer}")
-        st.write("**Retrieved Passages**:")
-        for i, passage in enumerate(retrieved_passages):
-            st.write(f"Passage {i+1}:\n{passage}\n")
+    st.write(f"**Answer**: {answer}")
+    st.write("**Retrieved Passages**:")
+    for i, passage in enumerate(retrieved_passages):
+        st.write(f"Passage {i+1}:\n{passage}\n")
 
-# Run the app
-if __name__ == '__main__':
-    st.write("Upload the book and ask questions to get started!")
+
